@@ -7,16 +7,20 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 
 #include "thirdparty/stb/stb_image_write.h"
+#include "Eigen/Core"
 #include "rgb.h"
 
 #include <vector>
 #include <filesystem>
 
 namespace internal {
-    void appendToVec(std::vector<uint8_t> &vec, Rgb rgb) {
-        vec.push_back(rgb._r);
-        vec.push_back(rgb._g);
-        vec.push_back(rgb._b);
+    void appendToVec(std::vector<uint8_t> &vec, Eigen::Vector3d rgb) {
+        auto ri = static_cast<uint8_t>(255.9 * rgb.x());
+        auto gi = static_cast<uint8_t>(255.9 * rgb.y());
+        auto bi = static_cast<uint8_t>(255.9 * rgb.z());
+        vec.push_back(ri);
+        vec.push_back(gi);
+        vec.push_back(bi);
     }
 }
 
