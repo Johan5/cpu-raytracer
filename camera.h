@@ -56,7 +56,8 @@ public:
             return color;
         };
 
-        Vec3d debug = raytracePixel(_imgHeight / 2, _conf._imgWidth / 2);
+//        Vec3d debug = raytracePixel(_imgHeight / 2, _conf._imgWidth / 2);
+        Vec3d debug = raytracePixel(_imgHeight / 2, 0);
 
         std::vector<Vec3d> pixels;
         for (int32_t row = 0; row < _imgHeight; ++row) {
@@ -80,8 +81,8 @@ private:
 
         std::optional<RayIntersection> impact = gameObjectContainer.calcFirstRayIntersection(ray,
                                                                                              Interval{0.001, INF});
-        if (impact.has_value() && impact->_hitFrontFace) {
-            std::optional<Vec3d> bounceDir = calcReflection(impact.value());
+        if (impact.has_value()) {
+            std::optional<Vec3d> bounceDir = calcNewDirection(impact.value());
             if (bounceDir.has_value()) {
                 Ray newRay{impact->_impact, bounceDir.value()};
 

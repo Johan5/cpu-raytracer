@@ -41,7 +41,8 @@ struct RayIntersection {
     Ray _incomingRay;
     Material _material;
     Vec3d _impact;
-    /// The impact normal is always against the direction of the ray
+    /// The impact normal is always against the direction of the ray.
+    /// Guaranteed to be normalized
     Vec3d _impactNormal;
     double _rayT;
     bool _hitFrontFace;
