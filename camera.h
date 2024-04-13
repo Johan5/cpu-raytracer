@@ -4,6 +4,8 @@
 #include "vec.h"
 #include "game_object_container.h"
 #include "image.h"
+#include "Eigen/Core"
+#include "Eigen/Geometry"
 
 #include <filesystem>
 #include <cstdint>
@@ -13,42 +15,57 @@ struct CameraConfig {
     double _targetAspectRatio = 16.0 / 9.0;
     // imgHeight is inferred from aspect ratio
     int32_t _imgWidth = 400;
-    // viewportWidth is inferred from aspect ratio
-    double _viewportHeight = 2.0;
-    double _focalLength = 1.0;
+    double _verticalFieldOfView = 90;
     int32_t _samplesPerPixel = 100;
+    int32_t _maxRayDepth = 50;
+
+    Vec3d _lookFrom = {0, 0, 0};
+    Vec3d _lookAt = {0, 0, -1};
+    Vec3d _viewUp = {0, 1, 0}; // Camera-space "up" direction
+
+    // Length at which everything will be exactly in focus
+    double _focusDist = 1;
+    // For items not in focus, a larger defocusAngle will mean less sharp
+    double _defocusAngle = 0;
 };
 
 class Camera : public GameObject {
 public:
-    Camera(const Vec3d &pos, const CameraConfig &conf) : GameObject(pos), _conf(conf) {
+    explicit Camera(const CameraConfig &conf) : GameObject(conf._lookFrom), _conf(conf) {
+        assert(_conf._defocusAngle >= 0);
         _imgHeight = static_cast<int32_t>(_conf._imgWidth / _conf._targetAspectRatio);
-        _viewportWidth = _conf._viewportHeight * (static_cast<double>(_conf._imgWidth) / _imgHeight);
+        double vFov = degrees_to_radians(_conf._verticalFieldOfView);
+        double halfHeight = _conf._focusDist * std::tan(vFov / 2.0);
+        _viewportHeight = 2.0 * halfHeight;
+        _viewportWidth = _viewportHeight * (static_cast<double>(_conf._imgWidth) / _imgHeight);
+
+        _w = (_conf._lookFrom - _conf._lookAt).normalized();
+        _u = _conf._viewUp.cross(_w).normalized();
+        _v = _w.cross(_u);
+
+        // viewport (0,0) is top-left
+        Vec3d viewportU = _viewportWidth * _u;
+        Vec3d viewportV = _viewportHeight * -_v;
+
+        _pixDeltaU = viewportU / _conf._imgWidth;
+        _pixDeltaV = viewportV / _imgHeight;
+
+        Vec3d viewportTopLeft = _pos - (_conf._focusDist * _w) - (viewportU / 2) - (viewportV / 2);
+        _pix00Pos = viewportTopLeft + (_pixDeltaU + _pixDeltaV) / 2.0;
+
+        double defocusRadius = _conf._focusDist * std::tan(degrees_to_radians(_conf._defocusAngle) / 2);
+        _defocusDiskU = _u * defocusRadius;
+        _defocusDiskV = _v * defocusRadius;
     }
 
     /// Result is written to file
     void render(const GameObjectContainer &objectsToRender) const {
-        Vec3d viewportU = Vec3d{static_cast<double>(_viewportWidth), 0, 0}; // "WIDTH"
-        Vec3d viewportV = Vec3d{0, -_conf._viewportHeight, 0}; // "HEIGHT"
-
-        auto pixelDeltaU = viewportU / _conf._imgWidth;
-        auto pixelDeltaV = viewportV / _imgHeight;
-
-        Vec3d viewportTopLeft = _pos + Vec3d{0, 0, -_conf._focalLength} +
-                                Vec3d{-_viewportWidth / 2.0, _conf._viewportHeight / 2.0, 0.0};
-        Vec3d topLeftPixelWorldCoords = viewportTopLeft + (pixelDeltaU + pixelDeltaV) / 2.0;
-
-
         // create img
-        auto raytracePixel = [&](int32_t row, int32_t col) {
-            Vec3d pixelCenter = topLeftPixelWorldCoords + (row * pixelDeltaV) + (col * pixelDeltaU);
+        auto raytracePixel = [this, &objectsToRender](int32_t row, int32_t col) {
+            Vec3d pixelCenter = _pix00Pos + (row * _pixDeltaV) + (col * _pixDeltaU);
             Vec3d color{0, 0, 0};
             for (int32_t i = 0; i < _conf._samplesPerPixel; ++i) {
-                Vec3d offsetU = (randomDouble() - 0.5) * pixelDeltaU;
-                Vec3d offsetV = (randomDouble() - 0.5) * pixelDeltaV;
-                Vec3d rayTarget = pixelCenter + offsetU + offsetV;
-                Vec3d rayDir = rayTarget - _pos;
-                Ray ray{_pos, rayDir};
+                Ray ray = constructRay(row, col);
                 int32_t bounceCounter = 0;
                 color += rayColor(ray, objectsToRender, bounceCounter);
             }
@@ -74,8 +91,7 @@ public:
 
 private:
     Vec3d rayColor(const Ray &ray, const GameObjectContainer &gameObjectContainer, int32_t &bouncesSoFar) const {
-        constexpr int32_t BOUNCE_LIMIT = 50;
-        if (bouncesSoFar == BOUNCE_LIMIT) {
+        if (bouncesSoFar == _conf._maxRayDepth) {
             return Vec3d{0, 0, 0};
         }
 
@@ -105,8 +121,35 @@ private:
         return (1.0 - a) * white + a * blue;
     }
 
+    Ray constructRay(int32_t row, int32_t col) const {
+        Vec3d randomPixelOffset = {randomDouble() - 0.5, randomDouble() - 0.5, 0};
+        Vec3d offsetU = ((col + randomPixelOffset.x()) * _pixDeltaU);
+        Vec3d offsetV = ((row + randomPixelOffset.y()) * _pixDeltaV);
+        Vec3d focusPlaneTarget = _pix00Pos + offsetU + offsetV;
+        Vec3d rayOrigin = _pos;
+        if (_conf._defocusAngle > 0) {
+            Vec3d randomOffset = calcRandomVecOnDisk();
+            rayOrigin += randomOffset.x() * _defocusDiskU + randomOffset.y() * _defocusDiskV;
+        }
+
+        Vec3d rayDir = focusPlaneTarget - rayOrigin;
+        Ray ray{rayOrigin, rayDir};
+        return ray;
+    }
 
     CameraConfig _conf;
     int32_t _imgHeight;
-    int32_t _viewportWidth;
+    double _viewportWidth;
+    double _viewportHeight;
+
+    // Camera frame basis vectors
+    Vec3d _u; // right
+    Vec3d _v; // up
+    Vec3d _w; // back
+
+    Vec3d _pixDeltaU;
+    Vec3d _pixDeltaV;
+    Vec3d _pix00Pos;
+    Vec3d _defocusDiskU;
+    Vec3d _defocusDiskV;
 };

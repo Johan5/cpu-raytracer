@@ -36,6 +36,16 @@ inline Vec3d randomVec(double min, double max) {
     return Vec3d{randomDouble(min, max), randomDouble(min, max), randomDouble(min, max)};
 }
 
+/// Returns a random unit vector on (x,y) plane disc
+inline Vec3d calcRandomVecOnDisk() {
+    while (true) {
+        Vec3d v = Vec3d{randomDouble(-1, 1), randomDouble(-1, 1), 0.0};
+        if (v.squaredNorm() < 1) {
+            return v;
+        }
+    }
+}
+
 inline Vec3d calcRandomVecOnSphere() {
     auto vecInSphere = []() {
         while (true) {
