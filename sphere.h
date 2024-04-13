@@ -5,37 +5,51 @@
 #include "ray.h"
 
 #include <optional>
+#include "game_object.h"
 
-class Sphere {
+class Sphere : public GameObject {
 public:
     Sphere() = default;
 
-    Sphere(const Eigen::Vector3d &centre, double r) : _centre(centre), _r(r) {
+    Sphere(const Vec3d &centre, double r) : GameObject(centre), _r(r) {
     }
 
-    const Eigen::Vector3d& getCentre() const {
-        return _centre;
+    const Vec3d& getCentre() const {
+        return _pos;
     }
 
     double getRadius() const {
         return _r;
     }
 
-    std::optional<Eigen::Vector3d> rayIntersection(const Ray &ray) const {
-        double a = ray.getDirection().dot(ray.getDirection());
-        double b = (-2 * ray.getDirection()).dot(_centre - ray.getOrigin());
-        double c = (_centre - ray.getOrigin()).dot(_centre - ray.getOrigin()) - _r * _r;
+    std::optional<RayIntersection> rayIntersection(const Ray &ray, Interval rayInterval) const override {
+        Vec3d oc = _pos - ray.getOrigin();
+        double a = ray.getDirection().squaredNorm();
+        double h = ray.getDirection().dot(oc);
+        double c = oc.squaredNorm() - _r * _r;
+        double discriminant = h * h - a * c;
 
-        auto discriminant = b * b - 4 * a * c;
         if (discriminant < 0) {
             return std::nullopt;
-        } else {
-            double t = (-b - sqrt(discriminant)) / (2.0 * a);
-            return ray.interpolate(t);
         }
+
+        double sqrtD = sqrt(discriminant);
+
+        double t = (h - sqrtD) / a;
+        if (!rayInterval.containsExclusive(t)) {
+            t = (h + sqrtD) / a;
+            if (!rayInterval.containsExclusive(t)) {
+                return std::nullopt;
+            }
+        }
+
+        Vec3d impact = ray.interpolate(t);
+        Vec3d outwardsNormal = (impact - _pos).normalized();
+        bool hitFrontFace = RayIntersection::hitFrontFace(ray.getDirection(), outwardsNormal);
+        Vec3d impactNormal = hitFrontFace ? outwardsNormal : -outwardsNormal;
+        return RayIntersection{impact, impactNormal, t, hitFrontFace};
     }
 
 private:
-    Eigen::Vector3d _centre = {0, 0, 0};
     double _r = 0.0;
 };
