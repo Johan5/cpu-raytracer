@@ -13,6 +13,8 @@ public:
 
     explicit GameObject(const Vec3d &pos) : _pos(pos) {}
 
+    virtual ~GameObject() = default;
+
     virtual std::optional<RayIntersection> rayIntersection(const Ray &ray, Interval t) const {
         return std::nullopt;
     }

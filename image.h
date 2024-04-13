@@ -55,7 +55,7 @@ public:
             PixelT gammaCorrectedPixel = internal::calcGamma2Correction(pixel);
             internal::appendToVec(rawData, gammaCorrectedPixel);
         }
-        int error = stbi_write_png("test.png", _width, _height, _channels, rawData.data(), _width * _channels);
+        int error = stbi_write_png("../img_out/test.png", _width, _height, _channels, rawData.data(), _width * _channels);
 
         return error == 1;
     }

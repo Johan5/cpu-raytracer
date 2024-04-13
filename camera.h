@@ -40,27 +40,29 @@ public:
 
 
         // create img
+        auto raytracePixel = [&](int32_t row, int32_t col) {
+            Vec3d pixelCenter = topLeftPixelWorldCoords + (row * pixelDeltaV) + (col * pixelDeltaU);
+            Vec3d color{0, 0, 0};
+            for (int32_t i = 0; i < _conf._samplesPerPixel; ++i) {
+                Vec3d offsetU = (randomDouble() - 0.5) * pixelDeltaU;
+                Vec3d offsetV = (randomDouble() - 0.5) * pixelDeltaV;
+                Vec3d rayTarget = pixelCenter + offsetU + offsetV;
+                Vec3d rayDir = rayTarget - _pos;
+                Ray ray{_pos, rayDir};
+                int32_t bounceCounter = 0;
+                color += rayColor(ray, objectsToRender, bounceCounter);
+            }
+            color /= _conf._samplesPerPixel;
+            return color;
+        };
+
+        Vec3d debug = raytracePixel(_imgHeight / 2, _conf._imgWidth / 2);
+
         std::vector<Vec3d> pixels;
         for (int32_t row = 0; row < _imgHeight; ++row) {
             std::cout << "\rScanlines remaining: " << (_imgHeight - row) << ' ' << std::flush;
             for (int32_t col = 0; col < _conf._imgWidth; ++col) {
-                if (row == _imgHeight / 2 && col == _conf._imgWidth / 2) {
-                    int asd =2;
-                }
-
-                Vec3d pixelCenter = topLeftPixelWorldCoords + (row * pixelDeltaV) + (col * pixelDeltaU);
-                Vec3d color{0,0,0};
-                for (int32_t i = 0; i < _conf._samplesPerPixel; ++i) {
-                    Vec3d offsetU = (randomDouble() - 0.5) * pixelDeltaU;
-                    Vec3d offsetV = (randomDouble() - 0.5) * pixelDeltaV;
-                    Vec3d rayTarget = pixelCenter + offsetU + offsetV;
-                    Vec3d rayDir = rayTarget - _pos;
-                    Ray ray{_pos, rayDir};
-                    int32_t bounceCounter = 0;
-                    color += rayColor(ray, objectsToRender, bounceCounter);
-                }
-                color /= _conf._samplesPerPixel;
-
+                Vec3d color = raytracePixel(row, col);
                 pixels.push_back(color);
             }
         }
@@ -70,30 +72,37 @@ public:
     }
 
 private:
-    Vec3d rayColor(const Ray &ray, const GameObjectContainer &gameObjectContainer, int32_t& bouncesSoFar) const {
+    Vec3d rayColor(const Ray &ray, const GameObjectContainer &gameObjectContainer, int32_t &bouncesSoFar) const {
         constexpr int32_t BOUNCE_LIMIT = 50;
-        if (bouncesSoFar > 3) {
-            int asd =2;
-        }
         if (bouncesSoFar == BOUNCE_LIMIT) {
-            return Vec3d{0,0,0};
+            return Vec3d{0, 0, 0};
         }
-        const auto blue = Vec3d{0.5, 0.7, 1.0};
-        const auto white = Vec3d{1.0, 1.0, 1.0};
 
         std::optional<RayIntersection> impact = gameObjectContainer.calcFirstRayIntersection(ray,
                                                                                              Interval{0.001, INF});
         if (impact.has_value() && impact->_hitFrontFace) {
-            Vec3d bounceDir = lambertianReflection(impact.value());
-            Ray newRay{impact->_impact, bounceDir};
-            return rayColor(newRay, gameObjectContainer, ++bouncesSoFar) / 2.0;
+            std::optional<Vec3d> bounceDir = calcReflection(impact.value());
+            if (bounceDir.has_value()) {
+                Ray newRay{impact->_impact, bounceDir.value()};
+
+                Vec3d attenuationColor = impact->_material._albedo;
+                Vec3d recursiveColor = rayColor(newRay, gameObjectContainer, ++bouncesSoFar);
+                Vec3d combinedColor = attenuationColor.cwiseProduct(recursiveColor);
+
+                return combinedColor;
+            } else {
+                /// ray was absorbed
+                return Vec3d{0, 0, 0};
+            }
         }
 
+        // Background color
+        const auto blue = Vec3d{0.5, 0.7, 1.0};
+        const auto white = Vec3d{1.0, 1.0, 1.0};
         auto dir = ray.getDirection().normalized();
         auto a = (dir.y() + 1.0) / 2.0;
         return (1.0 - a) * white + a * blue;
     }
-
 
 
     CameraConfig _conf;

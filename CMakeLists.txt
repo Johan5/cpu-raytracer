@@ -12,6 +12,7 @@ add_executable(raytracer main.cpp
         vec.h
         math_utils.h
         interval.h
-        camera.h)
+        camera.h
+        material.h)
 
 target_include_directories(raytracer PRIVATE thirdparty thirdparty/eigen)

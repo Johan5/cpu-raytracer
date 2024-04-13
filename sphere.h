@@ -6,15 +6,16 @@
 
 #include <optional>
 #include "game_object.h"
+#include "material.h"
 
 class Sphere : public GameObject {
 public:
     Sphere() = default;
 
-    Sphere(const Vec3d &centre, double r) : GameObject(centre), _r(r) {
+    Sphere(const Vec3d &centre, double r, const Material &material) : GameObject(centre), _material(material), _r(r) {
     }
 
-    const Vec3d& getCentre() const {
+    const Vec3d &getCentre() const {
         return _pos;
     }
 
@@ -47,9 +48,11 @@ public:
         Vec3d outwardsNormal = (impact - _pos).normalized();
         bool hitFrontFace = RayIntersection::hitFrontFace(ray.getDirection(), outwardsNormal);
         Vec3d impactNormal = hitFrontFace ? outwardsNormal : -outwardsNormal;
-        return RayIntersection{impact, impactNormal, t, hitFrontFace};
+        return RayIntersection{ray, _material, impact, impactNormal, t, hitFrontFace};
     }
 
 private:
+    Material _material;
     double _r = 0.0;
+
 };

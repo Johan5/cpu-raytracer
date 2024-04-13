@@ -4,6 +4,7 @@
 #include "ray.h"
 
 #include <numeric>
+#include <optional>
 
 const double INF = std::numeric_limits<double>::infinity();
 const double PI = 3.1415926535897932385;
@@ -19,7 +20,7 @@ inline double randomDouble() {
 
 /// [min, max)
 inline double randomDouble(double min, double max) {
-    return min + (max-min) * randomDouble();
+    return min + (max - min) * randomDouble();
 }
 
 /// [0, 1)
@@ -43,7 +44,7 @@ inline Vec3d calcRandomVecOnSphere() {
     return vecInSphere().normalized();
 }
 
-inline Vec3d randomVecOnHemisphere(const Vec3d& normal) {
+inline Vec3d randomVecOnHemisphere(const Vec3d &normal) {
     Vec3d unitVec = calcRandomVecOnSphere();
     if (unitVec.dot(normal) > 0.0) {
         return unitVec;
@@ -51,11 +52,41 @@ inline Vec3d randomVecOnHemisphere(const Vec3d& normal) {
     return -unitVec;
 }
 
-inline Vec3d lambertianReflection(const RayIntersection& intersection) {
-    // draw a unit-sphere around the point (impact + impactNormal), our reflection should target a random point on this
-    // sphere
-    Vec3d sphereCenter = intersection._impact + intersection._impactNormal;
-    Vec3d randomVecOnSphere = calcRandomVecOnSphere();
-    Vec3d target = sphereCenter + randomVecOnSphere;
-    return target - intersection._impact;
+inline bool vecIsAlmostZero(const Vec3d& vec) {
+    double e = 1e-8;
+    return std::abs(vec.x()) < e && std::abs(vec.y()) < e && std::abs(vec.z()) < e;
+}
+
+/// Returns nullopt if ray is absorbed
+inline std::optional<Vec3d> calcReflection(const RayIntersection &intersection) {
+    switch (intersection._material._reflectanceType) {
+        case ReflectanceType::Lambertian: {
+            // draw a unit-sphere around the point (impact + impactNormal), our reflection should target a random point on this
+            // sphere
+            Vec3d sphereCenter = intersection._impact + intersection._impactNormal;
+            Vec3d randomVecOnSphere = calcRandomVecOnSphere();
+            Vec3d target = sphereCenter + randomVecOnSphere;
+            Vec3d scatter = target - intersection._impact;
+            if (vecIsAlmostZero(scatter)) {
+                return intersection._impactNormal; // this is very unlikely
+            }
+            return scatter;
+        }
+        case ReflectanceType::Metal: {
+            Vec3d v = intersection._incomingRay.getDirection();
+            Vec3d n = intersection._impactNormal;
+            Vec3d reflectionVec = v - 2 * v.dot(n) * n ;
+            if (intersection._material._metalFuzz > 0) {
+                reflectionVec.normalize();
+                reflectionVec += intersection._material._metalFuzz * calcRandomVecOnSphere();
+            }
+            bool reflectionAboveSurface = reflectionVec.dot(n) > 0;
+            if (reflectionAboveSurface) {
+                return reflectionVec;
+            }
+            return std::nullopt;
+        }
+    }
+    assert(false);
+    return Vec3d{0,0,0};
 }
