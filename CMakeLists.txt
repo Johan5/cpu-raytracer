@@ -3,6 +3,8 @@ project(raytracer)
 
 set(CMAKE_CXX_STANDARD 20)
 
+add_subdirectory(thirdparty/oneTBB)
+
 add_executable(raytracer main.cpp
         image.h
         ray.h
@@ -15,4 +17,7 @@ add_executable(raytracer main.cpp
         camera.h
         material.h)
 
+
 target_include_directories(raytracer PRIVATE thirdparty thirdparty/eigen)
+
+target_link_libraries(raytracer TBB::tbb)

@@ -7,6 +7,9 @@
 #include "Eigen/Core"
 #include "Eigen/Geometry"
 
+
+#include <algorithm>
+#include <execution>
 #include <filesystem>
 #include <cstdint>
 #include <iostream>
@@ -76,14 +79,31 @@ public:
 //        Vec3d debug = raytracePixel(_imgHeight / 2, _conf._imgWidth / 2);
         Vec3d debug = raytracePixel(_imgHeight / 2, 0);
 
-        std::vector<Vec3d> pixels;
+        std::vector<std::pair<int32_t, int32_t>> indices;
         for (int32_t row = 0; row < _imgHeight; ++row) {
-            std::cout << "\rScanlines remaining: " << (_imgHeight - row) << ' ' << std::flush;
             for (int32_t col = 0; col < _conf._imgWidth; ++col) {
-                Vec3d color = raytracePixel(row, col);
-                pixels.push_back(color);
+                indices.emplace_back(row, col);
             }
         }
+
+        int64_t pixelCount = _imgHeight *_conf._imgWidth;
+        std::atomic<int64_t> progressCounter = 0;
+        std::vector<Vec3d> pixels(pixelCount, Vec3d{});
+        std::for_each(
+                std::execution::par_unseq,
+                std::begin(indices),
+                std::end(indices),
+                [&](std::pair<int32_t, int32_t> idx) {
+                    if (idx.second == 0) {
+                        double progress = static_cast<double>(progressCounter) / static_cast<double>(pixelCount);
+                        std::cout << std::setprecision(2) << "Progress: " << 100 * progress << " %\n";
+                    }
+                    Vec3d color = raytracePixel(idx.first, idx.second);
+                    pixels[idx.first * _conf._imgWidth + idx.second] = color;
+                    progressCounter++;
+                }
+        );
+
         std::cout << "\rDone.                 \n";
         Image<Vec3d> image{std::move(pixels), _conf._imgWidth, _imgHeight, 3};
         image.writeToFile(std::filesystem::path{"./"});

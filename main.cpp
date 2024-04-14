@@ -5,7 +5,6 @@
 #include "camera.h"
 #include "material.h"
 
-
 int main() {
     std::cout << "Hello, World!" << std::endl;
 
